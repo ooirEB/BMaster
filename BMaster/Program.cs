@@ -13,11 +13,11 @@ namespace BMaster
     {
         private static AIHeroClient user;
 
-        private static Menu bmMenu;
+        private static Menu bmMenu, masteryEmoteMenu, generalMenu, laughMenu , spellsMenu, otherMenu;
 
         private static readonly Random delayRandom = new Random();
 
-        private static int assists;
+        private static int badgeAssists,laughAssists;
 
         private static List<string> spellNames = new List<string>();
 
@@ -30,36 +30,65 @@ namespace BMaster
         {
             // Assign values
             user = Player.Instance;
-            assists = user.Assists;
+            badgeAssists = user.Assists;
+            laughAssists = user.Assists;
 
             // Creating menu
             bmMenu = MainMenu.AddMenu("BMaster", "BMasterID", "BMaster - Tilt your enemies");
 
-            bmMenu.Add("mode", new ComboBox("Mode:", 0, "None", "Laugh", "Mastery Badge", "Both"));
+            bmMenu.AddGroupLabel("Have fun!");
+            bmMenu.AddLabel("Be sure to give feedback on the forums!");
 
-            bmMenu.AddGroupLabel("Random Delay");
-            bmMenu.AddLabel("Delay is randomly generated between these two values");
-            bmMenu.AddLabel("Both sliders on 0 - No delay");
-            bmMenu.Add("delay1", new Slider("From", 125, 0, 1000));
-            bmMenu.Add("delay2", new Slider("To", 1000, 0, 2000));
+            generalMenu = bmMenu.AddSubMenu("General", "GeneralID", "General Menu");
 
-            bmMenu.AddGroupLabel("Other stuff:");
-            bmMenu.Add("pingOnAllyDeath", new CheckBox("Ping <?> on ally that dies near you", true));
+            generalMenu.AddGroupLabel("Random Delay");
+            generalMenu.AddLabel("Delay is randomly generated between these two values");
+            generalMenu.AddLabel("Both sliders on 0 - No delay");
+            generalMenu.Add("delay1", new Slider("From", 125, 0, 2000));
+            generalMenu.Add("delay2", new Slider("To", 1000, 0, 2000));
 
-            bmMenu.AddGroupLabel("Emote:");
-            bmMenu.Add("emoteOnKill", new CheckBox("On kill", true));
-            bmMenu.Add("emoteOnDeath", new CheckBox("On death", false));
-            bmMenu.Add("emoteOnAssist", new CheckBox("On assist", true));
-            bmMenu.Add("emoteOnAce", new CheckBox("On ace", false));
-            bmMenu.Add("emoteNearDead", new CheckBox("Near dead enemy players", false));
+            generalMenu.AddGroupLabel("Master Switch:");
+            generalMenu.Add("useMastery", new CheckBox("Enable Mastery Emote"));
+            generalMenu.Add("useLaugh", new CheckBox("Enable Laugh"));
+            generalMenu.Add("useSpell", new CheckBox("Enable Spells"));
+            generalMenu.Add("useOther", new CheckBox("Enable other"));
+            
 
-            bmMenu.AddGroupLabel("Emote on spells:");
+            masteryEmoteMenu = bmMenu.AddSubMenu("Mastery Badge","MasteryBadgeID","Mastery Badge settings");
+            masteryEmoteMenu.AddGroupLabel("Use Mastery Emote:");
+            masteryEmoteMenu.Add("emoteOnKill", new CheckBox("On kill", true));
+            masteryEmoteMenu.Add("emoteOnDeath", new CheckBox("On death", false));
+            masteryEmoteMenu.Add("emoteOnAssist", new CheckBox("On assist", true));
+            masteryEmoteMenu.Add("emoteOnAce", new CheckBox("On ace", false));
+            masteryEmoteMenu.Add("emoteNearDead", new CheckBox("Near dead enemy players", false));
+
+
+            laughMenu = bmMenu.AddSubMenu("Laugh", "LaughID", "Laugh settings");
+            laughMenu.AddGroupLabel("Use Laugh:");
+            laughMenu.Add("laughOnKill", new CheckBox("On kill", true));
+            laughMenu.Add("laughOnDeath", new CheckBox("On death", false));
+            laughMenu.Add("laughOnAssist", new CheckBox("On assist", true));
+            laughMenu.Add("laughOnAce", new CheckBox("On ace", false));
+
+            spellsMenu = bmMenu.AddSubMenu("Spells", "SpellsID", "Spells settings");
+            spellsMenu.AddGroupLabel("Spells:");
             DrawSpellMenu();
+
+            otherMenu = bmMenu.AddSubMenu("Other", "OtherID", "Other settings");
+            otherMenu.Add("pingOnAllyDeath", new CheckBox("Ping <?> on ally that dies on your screen", true));
 
             // Creating events
             Game.OnNotify += GameOnOnNotify;
             Game.OnUpdate += GameOnOnUpdate;
             Obj_AI_Base.OnProcessSpellCast += Obj_AI_Base_OnProcessSpellCast;
+            Player.OnUpdateModel += delegate
+            {
+                Core.DelayAction(DrawSpellMenu, GenerateDelay());
+            };
+            Shop.OnBuyItem += delegate
+            {
+                Core.DelayAction(DrawSpellMenu, GenerateDelay());
+            };
 
             Chat.Print("BMaster - Tilt your enemies: Successfully loaded!");
         }
@@ -69,9 +98,11 @@ namespace BMaster
         {
             foreach (var spell in Player.Spells)
             {
-                if (spell.Name != "Unknown" && !spellNames.Contains(spell.Name))
+                
+                if (spell != null && spell.Name != "Unknown" && !spellNames.Contains(spell.Name))
                 {
-                    bmMenu.Add("emoteOn" + spell.Name, new CheckBox("On " + spell.Name, false));
+                    spellsMenu.Add("BadgeOn" + spell.Name, new CheckBox("Mastery Badge on " + spell.Name, false));
+                    spellsMenu.Add("LaughOn" + spell.Name, new CheckBox("Laugh on " + spell.Name, false));
                     spellNames.Add(spell.Name);
                 }
             }
@@ -80,69 +111,126 @@ namespace BMaster
         private static void Obj_AI_Base_OnProcessSpellCast(Obj_AI_Base sender, GameObjectProcessSpellCastEventArgs args)
         {
             // Emotes on spell casts
-            if (sender.IsMe)
+            if (sender.IsMe && generalMenu["useSpell"].Cast<CheckBox>().CurrentValue)
             {
                 foreach (var spell in Player.Spells)
                 {
-                    if (spell != null && spell.Slot == args.Slot && bmMenu["emoteOn" + spell.Name].Cast<CheckBox>().CurrentValue)
+                    
+                    if (spell != null && args != null && args.SData.Name.Equals(spell.SData.Name) && spellNames.Contains(spell.Name))
                     {
-                        Core.DelayAction(DoEmotes, GenerateDelay());
+                        if (spellsMenu["BadgeOn" + spell.Name].Cast<CheckBox>().CurrentValue)
+                        {
+                            Core.DelayAction(() => Chat.Say("/masterybadge"), GenerateDelay());
+                        }
+                        if (spellsMenu["LaughOn" + spell.Name].Cast<CheckBox>().CurrentValue)
+                        {
+                            Core.DelayAction(() => Player.DoEmote(Emote.Laugh), GenerateDelay());
+                        }
                         return;
                     }
                 }
-                Core.DelayAction(DrawSpellMenu, GenerateDelay());
             }
         }
 
         private static void GameOnOnUpdate(EventArgs args)
         {
             // Emotes near dead enemy heroes
-            var deadEnemy =
+            if (generalMenu["useMastery"].Cast<CheckBox>().CurrentValue && masteryEmoteMenu["emoteNearDead"].Cast<CheckBox>().CurrentValue)
+            {
+                var deadEnemy =
                 EntityManager.Heroes.Enemies.OrderBy(a => a.Distance(user.Position))
                     .FirstOrDefault(b => b.Distance(user) <= 100 && b.IsDead);
-            if (deadEnemy != null && bmMenu["emoteNearDead"].Cast<CheckBox>().CurrentValue)
-            {
-                Core.DelayAction(() => Chat.Say("/masterybadge"), GenerateDelay());
+                if (deadEnemy != null && masteryEmoteMenu["emoteNearDead"].Cast<CheckBox>().CurrentValue)
+                {
+                    Core.DelayAction(() => Chat.Say("/masterybadge"), GenerateDelay());
+                }
             }
-
-            
         }
 
         private static void GameOnOnNotify(GameNotifyEventArgs args)
         {
-            // On champion kills
-            if (bmMenu["emoteOnKill"].Cast<CheckBox>().CurrentValue && args.EventId == GameEventId.OnChampionKill && args.NetworkId == user.NetworkId)
+            /*
+             * 
+             *  Mastery Emote
+             * 
+             */
+            if (generalMenu["useMastery"].Cast<CheckBox>().CurrentValue)
             {
-                Core.DelayAction(DoEmotes, GenerateDelay());
-                return;
-            }
+                // On champion kills
+                if (masteryEmoteMenu["emoteOnKill"].Cast<CheckBox>().CurrentValue &&
+                    args.EventId == GameEventId.OnChampionKill && args.NetworkId == user.NetworkId)
+                {
+                    Core.DelayAction(() => Chat.Say("/masterybadge"), GenerateDelay());
+                }
 
-            // On death
-            if (bmMenu["emoteOnDeath"].Cast<CheckBox>().CurrentValue && args.EventId == GameEventId.OnDie && args.NetworkId == user.NetworkId)
-            {
-                Core.DelayAction(DoEmotes, GenerateDelay());
-                return;
-            }
+                // On death
+                if (masteryEmoteMenu["emoteOnDeath"].Cast<CheckBox>().CurrentValue && args.EventId == GameEventId.OnDie &&
+                    args.NetworkId == user.NetworkId)
+                {
+                    Core.DelayAction(() => Chat.Say("/masterybadge"), GenerateDelay());
+                }
 
-            // On assists
-            if (bmMenu["emoteOnAssist"].Cast<CheckBox>().CurrentValue && args.EventId == GameEventId.OnChampionKill &&
-                ObjectManager.GetUnitByNetworkId<AIHeroClient>(args.NetworkId).IsAlly && user.Assists > assists)
-            {
-                assists++;
-                Core.DelayAction(DoEmotes, GenerateDelay());
-                return;
-            }
+                // On assists
+                if (masteryEmoteMenu["emoteOnAssist"].Cast<CheckBox>().CurrentValue &&
+                    args.EventId == GameEventId.OnChampionKill &&
+                    ObjectManager.GetUnitByNetworkId<AIHeroClient>(args.NetworkId).IsAlly && user.Assists > badgeAssists)
+                {
+                    badgeAssists++;
+                    Core.DelayAction(() => Chat.Say("/masterybadge"), GenerateDelay());
+                }
 
-            // On ace
-            if (bmMenu["emoteOnAce"].Cast<CheckBox>().CurrentValue && args.EventId == GameEventId.OnAce &&
-                ObjectManager.GetUnitByNetworkId<AIHeroClient>(args.NetworkId).IsAlly)
-            {
-                Core.DelayAction(DoEmotes, GenerateDelay());
-                return;
+                // On ace
+                if (masteryEmoteMenu["emoteOnAce"].Cast<CheckBox>().CurrentValue && args.EventId == GameEventId.OnAce &&
+                    ObjectManager.GetUnitByNetworkId<AIHeroClient>(args.NetworkId).IsAlly)
+                {
+                    Core.DelayAction(() => Chat.Say("/masterybadge"), GenerateDelay());
+                }
             }
+            /*
+            * 
+            *  Laugh
+            * 
+            */
+            if (generalMenu["useLaugh"].Cast<CheckBox>().CurrentValue)
+            {
+                // On champion kills
+                if (laughMenu["laughOnKill"].Cast<CheckBox>().CurrentValue && args.EventId == GameEventId.OnChampionKill &&
+                    args.NetworkId == user.NetworkId)
+                {
+                    Core.DelayAction(() => Player.DoEmote(Emote.Laugh), GenerateDelay());
+                }
+
+                // On death
+                if (laughMenu["laughOnDeath"].Cast<CheckBox>().CurrentValue && args.EventId == GameEventId.OnDie &&
+                    args.NetworkId == user.NetworkId)
+                {
+                    Core.DelayAction(() => Player.DoEmote(Emote.Laugh), GenerateDelay());
+                }
+
+                // On assists
+                if (laughMenu["laughOnAssist"].Cast<CheckBox>().CurrentValue &&
+                    args.EventId == GameEventId.OnChampionKill &&
+                    ObjectManager.GetUnitByNetworkId<AIHeroClient>(args.NetworkId).IsAlly && user.Assists > laughAssists)
+                {
+                    laughAssists++;
+                    Core.DelayAction(() => Player.DoEmote(Emote.Laugh), GenerateDelay());
+                }
+
+                // On ace
+                if (laughMenu["laughOnAce"].Cast<CheckBox>().CurrentValue && args.EventId == GameEventId.OnAce &&
+                    ObjectManager.GetUnitByNetworkId<AIHeroClient>(args.NetworkId).IsAlly)
+                {
+                    Core.DelayAction(() => Player.DoEmote(Emote.Laugh), GenerateDelay());
+                }
+            }
+            /*
+             * 
+             * Ping
+             * 
+             */
 
             // On ally kill
-            if (bmMenu["pingOnAllyDeath"].Cast<CheckBox>().CurrentValue && args.EventId == GameEventId.OnDie)
+            if (generalMenu["useOther"].Cast<CheckBox>().CurrentValue && otherMenu["pingOnAllyDeath"].Cast<CheckBox>().CurrentValue && args.EventId == GameEventId.OnDie)
             {
                 foreach (var ally in EntityManager.Heroes.Allies)
                 {
@@ -158,33 +246,14 @@ namespace BMaster
         // Generate random delay
         private static int GenerateDelay()
         {
-            if (bmMenu["delay1"].Cast<Slider>().CurrentValue < bmMenu["delay2"].Cast<Slider>().CurrentValue)
+            if (generalMenu["delay1"].Cast<Slider>().CurrentValue < generalMenu["delay2"].Cast<Slider>().CurrentValue)
             {
-                return delayRandom.Next(bmMenu["delay1"].Cast<Slider>().CurrentValue,
-                    bmMenu["delay2"].Cast<Slider>().CurrentValue + 1);
+                return delayRandom.Next(generalMenu["delay1"].Cast<Slider>().CurrentValue,
+                    generalMenu["delay2"].Cast<Slider>().CurrentValue + 1);
             }
-            return delayRandom.Next(bmMenu["delay2"].Cast<Slider>().CurrentValue,
-                bmMenu["delay1"].Cast<Slider>().CurrentValue + 1);
+            return delayRandom.Next(generalMenu["delay2"].Cast<Slider>().CurrentValue,
+                generalMenu["delay1"].Cast<Slider>().CurrentValue + 1);
         }
-
-        // Cast selected emotes
-        private static void DoEmotes()
-        {
-            switch (bmMenu["mode"].Cast<ComboBox>().SelectedText)
-            {
-                case "None":
-                    break;
-                case "Both":
-                    Chat.Say("/masterybadge");
-                    Core.DelayAction(() => Player.DoEmote(Emote.Laugh), GenerateDelay());
-                    break;
-                case "Laugh":
-                    Player.DoEmote(Emote.Laugh);
-                    break;
-                case "Mastery Badge":
-                    Chat.Say("/masterybadge");
-                    break;
-            }
-        }
+        
     }
 }
